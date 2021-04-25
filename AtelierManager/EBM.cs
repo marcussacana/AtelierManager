@@ -1,0 +1,56 @@
+﻿using AdvancedBinary;
+using System;
+using System.Xml.Serialization;
+
+namespace AtelierManager
+{
+    public class EBM
+    {
+        byte[] Script;
+
+        static int Mode = -1;
+        IEBM Manager;
+
+        public EBM(byte[] Script) {
+            this.Script = Script;
+        }
+
+        public string[] Import() {
+            switch (Mode) {
+                case 3:
+                    Manager = new EBM3(Script);
+                    break;
+                case 2:
+                    Manager = new EBM2(Script);
+                    break;
+                case 1:
+                    Manager = new EBM1(Script);
+                    break;
+                case 0:
+                    Manager = new EBM0(Script);
+                    break;
+                default:
+                    for (int i = 3; i >= 0; i--)
+                    {
+                        try
+                        {
+                            Mode = i;
+                            return Import();
+                        }
+                        catch { }
+                    }
+                    throw new Exception("Invalid EBM File");
+            }
+            return Manager.Import();
+        }
+
+        public byte[] Export(string[] Content) {
+            return Manager.Export(Content);
+        }
+    }
+
+    internal interface IEBM {
+        string[] Import();
+        byte[] Export(string[] Content);        
+    }
+}
