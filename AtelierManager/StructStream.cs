@@ -1,9 +1,11 @@
-﻿using System;
+﻿//Updated time: 28/04/2021
+using System;
 using System.Collections.Generic;
 using System.Text;
 using System.IO;
 using System.Reflection;
 using System.Collections;
+using System.Linq;
 
 /// <summary>
 /// Advanced Binary Tools - By Marcussacana
@@ -24,7 +26,11 @@ namespace AdvancedBinary
         /// <summary>
         /// Pascal-Style String (Prefixed with the Length)
         /// </summary>
-        PString
+        PString,
+        /// <summary>
+        /// Fixed-Length String
+        /// </summary>
+        FString
     }
 
 
@@ -96,7 +102,8 @@ namespace AdvancedBinary
     /// </summary>
     public class PreProcess : Attribute
     {
-        public PreProcess(string PropertyName) {
+        public PreProcess(string PropertyName)
+        {
             this.PropertyName = PropertyName;
         }
         public string PropertyName;
@@ -112,6 +119,18 @@ namespace AdvancedBinary
             this.PropertyName = PropertyName;
         }
         public string PropertyName;
+    }
+
+    /// <summary>
+    /// Field Reference Length Array 
+    /// </summary>
+    public class RArray : Attribute
+    {
+        public RArray(string FieldName)
+        {
+            this.FieldName = FieldName;
+        }
+        public string FieldName = null;
     }
 
     /// <summary>
@@ -135,6 +154,7 @@ namespace AdvancedBinary
         public const string STRING = "System.String";
         public const string DELEGATE = "System.MulticastDelegate";
         public const string CHAR = "System.Char";
+        public const string BOOLEAN = "System.Boolean";
 
         //Attributes
         public const string PSTRING = "PString";
@@ -145,6 +165,7 @@ namespace AdvancedBinary
         public const string IGNORE = "Ignore";
         public const string FARRAY = "FArray";
         public const string PARRAY = "PArray";
+        public const string RARRAY = "RArray";
         public const string PREPROCESS = "PreProcess";
         public const string POSTPROCESS = "PostProcess";
     }
@@ -189,9 +210,11 @@ namespace AdvancedBinary
         {
             byte[] Arr;
 
-            if (Data is decimal) {
+            if (Data is decimal)
+            {
                 Arr = GetDecimalBytes(Data);
-            } else Arr = BitConverter.GetBytes(Data);
+            }
+            else Arr = BitConverter.GetBytes(Data);
 
             Array.Reverse(Arr, 0, Arr.Length);
             string type = Data.GetType().FullName;
@@ -272,44 +295,92 @@ namespace AdvancedBinary
             {
                 if (HasAttribute(field, Const.IGNORE))
                     continue;
-                switch (field.FieldType.ToString())
+                if (HasAttribute(field, Const.RARRAY))
                 {
-                    case Const.INT8:
-                    case Const.UINT8:
-                        Length += 1;
+                    string Name = GetAttributePropertyValue(field, Const.RARRAY, "FieldName");
+
+                    FieldInfo Reference = (from x in fields where x.Name == Name select x).Single();
+
+                    long Count = (long)(dynamic)Reference.GetValue(Struct);
+
+                    Length += GetFieldLength(field) * Count;
+                    continue;
+                }
+                if (HasAttribute(field, Const.PARRAY))
+                {
+                    string PType = Tools.GetAttributePropertyValue(field, Const.PARRAY, "PrefixType");
+                    dynamic Array = field.GetValue(Struct);
+                    Length += GetFieldLength(null, PType);
+                    Length += GetFieldLength(field) * Array.LongLength;
+                    continue;
+                }
+
+                if (HasAttribute(field, Const.FARRAY))
+                {
+                    long Count = (long)(dynamic)Tools.GetAttributePropertyValue(field, Const.FARRAY, "Length");
+                    Length += GetFieldLength(field) * Count;
+                    continue;
+                }
+
+                Length += GetFieldLength(field);
+            }
+            return Length;
+        }
+
+        internal static long GetFieldLength(FieldInfo Info, string Type = null)
+        {
+            long Length = 0;
+            Type = Info != null ? Info.FieldType.ToString() : Type;
+            if (Info.FieldType.IsArray)
+                Type = Type.Substring(0, Type.Length - 2);
+
+            switch (Type)
+            {
+                case Const.INT8:
+                case Const.UINT8:
+                    Length += 1;
+                    break;
+                case Const.INT16:
+                case Const.UINT16:
+                    Length += 2;
+                    break;
+                case Const.INT32:
+                case Const.FLOAT:
+                case Const.UINT32:
+                    Length += 4;
+                    break;
+                case Const.UINT64:
+                case Const.INT64:
+                case Const.DOUBLE:
+                    Length += 8;
+                    break;
+                case Const.STRING:
+                    if (!HasAttribute(Info, Const.FSTRING))
+                        throw new Exception("You can't calculate struct length with strings");
+                    else
+                        Length += GetAttributePropertyValue(Info, Const.FSTRING, "Length");
+                    break;
+                default:
+                    if (Info.FieldType.BaseType.ToString() == Const.DELEGATE)
                         break;
-                    case Const.UINT16:
-                    case Const.INT16:
-                        Length += 2;
-                        break;
-                    case Const.INT32:
-                    case Const.FLOAT:
-                    case Const.UINT32:
-                        Length += 4;
-                        break;
-                    case Const.UINT64:
-                    case Const.INT64:
-                    case Const.DOUBLE:
-                        Length += 8;
-                        break;
-                    case Const.STRING:
-                        if (!HasAttribute(field, Const.FSTRING))
-                            throw new Exception("You can't calculate struct length with strings");
-                        else
-                            Length += GetAttributePropertyValue(field, Const.FSTRING, "Length");
-                        break;
-                    default:
-                        if (field.FieldType.BaseType.ToString() == Const.DELEGATE)
-                            break;
-                        if (HasAttribute(field, Const.IGNORE))
-                            break;
-                        if (HasAttribute(field, Const.FARRAY)) {
-                            Length += GetAttributePropertyValue(field, Const.FARRAY, "Length");
+                    if (Info.FieldType.IsArray)
+                    {
+                        if (HasAttribute(Info, Const.STRUCT))
+                        {
+                            Length += GetStructLength((dynamic)Activator.CreateInstance(Info.FieldType.GetElementType()));
                             break;
                         }
-                        throw new Exception("Unk Struct Field: " + field.FieldType.ToString());
-                }
+                    }
+                    else if (HasAttribute(Info, Const.STRUCT))
+                    {
+                        Length += GetStructLength((dynamic)Activator.CreateInstance(Info.DeclaringType));
+                        break;
+                    }
+                    if (HasAttribute(Info, Const.IGNORE))
+                        break;
+                    throw new Exception("Unk Struct Field: " + Info.FieldType.ToString());
             }
+
             return Length;
         }
 
@@ -389,6 +460,18 @@ namespace AdvancedBinary
         internal void WriteStruct(Type type, ref object Instance)
         {
             FieldInfo[] fields = type.GetFields(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+
+            foreach (FieldInfo field in fields)
+            {
+                if (HasAttribute(field, Const.IGNORE) || !HasAttribute(field, Const.RARRAY))
+                    continue;
+
+                dynamic Value = field.GetValue(Instance);
+                string PFieldName = Tools.GetAttributePropertyValue(field, Const.RARRAY, "FieldName");
+                FieldInfo PrefixField = (from x in fields where x.Name == PFieldName select x).First();
+                PrefixField.SetValue(Instance, ParseType(Value.LongLength, PrefixField.FieldType.FullName));
+            }
+
             foreach (FieldInfo field in fields)
             {
                 if (HasAttribute(field, Const.IGNORE))
@@ -400,38 +483,38 @@ namespace AdvancedBinary
                     WriteField(Value, Type, field, ref Instance);
                     continue;
                 }
+
                 if (HasAttribute(field, Const.FARRAY))
                 {
-                    long BufferLen = Tools.GetAttributePropertyValue(field, Const.FARRAY, "Length");
+                    long Length = Tools.GetAttributePropertyValue(field, Const.FARRAY, "Length");
 
-                    if (Value.Length > BufferLen)
+                    if (Value.LongLength > Length)
                         throw new Exception("Wrong Array Buffer Length");
 
-                    byte[] Arr = new byte[BufferLen];
-                    Value.CopyTo(Arr, 0);
-
-                    Write(Arr);
-                    continue;
                 }
+                else if (HasAttribute(field, Const.PARRAY))
+                {
+                    string PType = Tools.GetAttributePropertyValue(field, Const.PARRAY, "PrefixType");
+                    dynamic Length = ParseType(Value.LongLength, PType);
 
-                if (!HasAttribute(field, Const.PARRAY))
-                    throw new Exception("Bad Struct Array Configuration.");
+                    if (BigEndian)
+                        Length = Tools.Reverse(Length);
+                    Write(Length);
 
-                string PType = Tools.GetAttributePropertyValue(field, Const.PARRAY, "PrefixType");
-                dynamic Length = ParseType(Value.LongLength, PType);
+                }
+                else if (!HasAttribute(field, Const.RARRAY))
+                    throw new Exception("Bad Struct Array Configuration");
 
-                if (BigEndian)
-                    Length = Tools.Reverse(Length);
-                Write(Length);
-
+                string RealType = Type.Substring(0, Type.Length - 2);
                 IEnumerator Enum = Value.GetEnumerator();
-                for (long i = 0; i < Length; i++)
+                for (long i = 0; i < Value.LongLength; i++)
                 {
                     Enum.MoveNext();
-                    WriteField(Enum.Current, Type.Substring(0, Type.Length - 2), field, ref Instance);
+                    WriteField(Enum.Current, RealType, field, ref Instance);
                 }
             }
         }
+
 
         internal dynamic ParseType(dynamic Value, string Type)
         {
@@ -557,7 +640,7 @@ namespace AdvancedBinary
                     break;
             }
         }
-        public void Write(FieldInfo Field, dynamic Value, StringStyle Style)
+        void Write(FieldInfo Field, dynamic Value, StringStyle Style)
         {
             switch (Style)
             {
@@ -586,7 +669,8 @@ namespace AdvancedBinary
             base.Write(Value);
         }
 
-        public new void Write(uint Value) {
+        public new void Write(uint Value)
+        {
             if (BigEndian)
                 Value = Tools.Reverse(Value);
             base.Write(Value);
@@ -647,7 +731,26 @@ namespace AdvancedBinary
             base.Write(Value);
         }
 
-        internal void WritePString(FieldInfo Field, dynamic Value)
+        public void WriteString(string Str, StringStyle Style, FieldInfo Info = null) {
+            switch (Style) {
+                case StringStyle.CString:
+                    base.Write(Encoding.GetBytes(Str + "\x0"));
+                    break;
+                case StringStyle.FString:
+                    byte[] Buffer = new byte[Tools.GetAttributePropertyValue(Info, Const.FSTRING, "Length")];
+                    Encoding.GetBytes(Str).CopyTo(Buffer, 0);
+                    base.Write(Buffer);
+                    break;
+                case StringStyle.UCString:
+                    base.Write(Encoding.Unicode.GetBytes(Str + "\x0"));
+                    break;
+                case StringStyle.PString:
+                    WritePString(Info, Str);
+                    break;
+            }
+        }
+
+        void WritePString(FieldInfo Field, string Value)
         {
             byte[] Arr = Encoding.GetBytes(Value);
 
@@ -764,6 +867,7 @@ namespace AdvancedBinary
 
                 string FType = field.FieldType.ToString();
                 dynamic Value = null;
+                dynamic Count = null;
 
                 if (!FType.EndsWith("[]"))
                 {
@@ -774,38 +878,40 @@ namespace AdvancedBinary
                 {
                     if (Tools.HasAttribute(field, Const.FARRAY))
                     {
-                        byte[] Buffer = new byte[Tools.GetAttributePropertyValue(field, Const.FARRAY, "Length")];
-
-                        if (Read(Buffer, 0, Buffer.Length) != Buffer.Length)
-                            throw new Exception("Failed to Read");
-
-                        Value = Buffer;
-
+                        Count = Tools.GetAttributePropertyValue(field, Const.FARRAY, "Length");
                     }
                     else if (Tools.HasAttribute(field, Const.PARRAY))
                     {
                         FType = FType.Substring(0, FType.Length - 2);
 
                         string PType = Tools.GetAttributePropertyValue(field, Const.PARRAY, "PrefixType");
-                        dynamic Count = ReadField(PType, field, ref Instance);
-
-
-                        object[] Content = new object[Count];
-                        for (long x = 0; x < Count; x++)
-                        {
-                            Content[x] = ReadField(FType, field, ref Instance);
-                        }
-
-
-                        Value = Array.CreateInstance(Type.GetType(FType), Count);
-                        Content.CopyTo(Value, 0);
+                        Count = ReadField(PType, field, ref Instance);
 
                     }
-                    else
-                        throw new Exception("Bad Struct Configuration");
+                    else if (Tools.HasAttribute(field, Const.RARRAY))
+                    {
+                        string PFieldName = Tools.GetAttributePropertyValue(field, Const.RARRAY, "FieldName");
+                        FieldInfo PrefixField = (from x in fields where x.Name == PFieldName select x).First();
+                        Count = PrefixField.GetValue(Instance);
+
+                    }
+                    else throw new Exception("Bad Struct Array Configuration");
+
+                    FType = FType.Substring(0, FType.Length - 2);
+
+                    object[] Content = new object[Count];
+                    for (long x = 0; x < Count; x++)
+                    {
+                        Content[x] = ReadField(FType, field, ref Instance);
+                    }
+
+
+                    Value = Array.CreateInstance(Type.GetType(FType), Count);
+                    Content.CopyTo(Value, 0);
                 }
 
                 field.SetValue(Instance, Value);
+
 
                 if (Tools.HasAttribute(field, Const.POSTPROCESS))
                 {
@@ -819,38 +925,9 @@ namespace AdvancedBinary
         }
 
         internal dynamic CreateArrayInstance(string TypeName, dynamic InitialLength)
-        {/*
-            switch (TypeName) {
-                case Const.INT8:
-                    return new sbyte[InitialLength];
-                case Const.UINT8:
-                    return new byte[InitialLength];
-                case Const.INT16:
-                    return new short[InitialLength];
-                case Const.UINT16:
-                    return new ushort[InitialLength];
-                case Const.INT32:
-                    return new int[InitialLength];
-                case Const.UINT32:
-                    return new uint[InitialLength];
-                case Const.INT64:
-                    return new long[InitialLength];
-                case Const.UINT64:
-                    return new ulong[InitialLength];
-                case Const.DOUBLE:
-                    return new double[InitialLength];
-                case Const.FLOAT:
-                    return new float[InitialLength];
-                case Const.STRING:
-                    return new string[InitialLength];
-                default:
-                    throw new Exception("Unk Variable Type");
-            }*/
+        {
             Type ArrType = Type.GetType(TypeName);
             return Array.CreateInstance(ArrType, InitialLength);
-            /*
-            Type stringArrayType = Type.GetType(TypeName).MakeArrayType();
-            return Activator.CreateInstance(stringArrayType, new object[] { InitialLength });*/
         }
 
         internal dynamic ReadRawType(string Type)
@@ -861,7 +938,8 @@ namespace AdvancedBinary
 
         internal dynamic ReadField(string Type, FieldInfo field, ref object Instance)
         {
-            if (Tools.HasAttribute(field, Const.PREPROCESS)) {
+            if (Tools.HasAttribute(field, Const.PREPROCESS))
+            {
                 var PropertyName = (string)Tools.GetAttributePropertyValue(field, Const.PREPROCESS, "PropertyName");
                 var Property = field.DeclaringType.GetProperty(PropertyName, BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
                 FieldInvoke Invoker = ((FieldInvoke)Property.GetValue(Instance));
@@ -873,6 +951,9 @@ namespace AdvancedBinary
             dynamic Value = null;
             switch (Type)
             {
+                case Const.BOOLEAN:
+                    Value = base.ReadBoolean();
+                    break;
                 case Const.INT8:
                     Value = base.ReadSByte();
                     break;
@@ -984,7 +1065,8 @@ namespace AdvancedBinary
             return Val;
         }
 
-        public new uint ReadUInt32() {
+        public new uint ReadUInt32()
+        {
             var Val = base.ReadUInt32();
             if (BigEndian)
                 Val = Tools.Reverse(Val);
@@ -1078,6 +1160,13 @@ namespace AdvancedBinary
                         Buffer.Add(Byte2);
                     }
                     return Encoding.GetString(Buffer.ToArray());
+                case StringStyle.FString:
+                    long Length = (long)Tools.GetAttributePropertyValue(Info, Const.FSTRING, "Length");
+                    bool TrimEnd = Tools.GetAttributePropertyValue(Info, Const.FSTRING, "TrimNull");
+                    byte[] Array = new byte[Length];
+                    if (BaseStream.Read(Array, 0, Array.Length) != Length)
+                        throw new Exception("Failed To Read the String");
+                    return TrimEnd ? Encoding.GetString(Array).TrimEnd('\x0') : Encoding.GetString(Array);
                 case StringStyle.PString:
                     if (Info != null)
                     {
@@ -1153,7 +1242,7 @@ namespace AdvancedBinary
             base.BaseStream.Flush();
         }
 
-        internal int Peek()
+        internal int PeekByte()
         {
             int b = BaseStream.ReadByte();
             BaseStream.Position--;
@@ -1165,7 +1254,22 @@ namespace AdvancedBinary
             byte[] Buff = new byte[4];
             int i = BaseStream.Read(Buff, 0, Buff.Length);
             BaseStream.Position -= i;
-            return BitConverter.ToInt32(Buff, 0);
+            return BigEndian ? BitConverter.ToInt32(Buff, 0) : Tools.Reverse(BitConverter.ToInt32(Buff, 0));
+        }
+        internal long PeekLong()
+        {
+            byte[] Buff = new byte[8];
+            int i = BaseStream.Read(Buff, 0, Buff.Length);
+            BaseStream.Position -= i;
+            return BigEndian ? BitConverter.ToInt64(Buff, 0) : Tools.Reverse(BitConverter.ToInt64(Buff, 0));
+        }
+
+        internal string PeekString(StringStyle Style, FieldInfo Info = null)
+        {
+            long Pos = BaseStream.Position;
+            string Rst = ReadString(Style, Info);
+            BaseStream.Position = Pos;
+            return Rst;
         }
     }
 }
