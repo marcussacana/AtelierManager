@@ -882,8 +882,6 @@ namespace AdvancedBinary
                     }
                     else if (Tools.HasAttribute(field, Const.PARRAY))
                     {
-                        FType = FType.Substring(0, FType.Length - 2);
-
                         string PType = Tools.GetAttributePropertyValue(field, Const.PARRAY, "PrefixType");
                         Count = ReadField(PType, field, ref Instance);
 
