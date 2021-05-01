@@ -5,6 +5,10 @@
 # AtelierManager
 A tool that can translate the .ebm files from some Atelier Games
 
+# GustFontEditor
+A tool that are able to modify the font from some gust games.
+Tested with Atelier Firis
+
 ### Unpacker/Repacker 
 A tool to unpack/repack the game files can be found at:
 https://github.com/VitaSmith/gust_tools
