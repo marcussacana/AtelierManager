@@ -31,20 +31,26 @@ namespace AtelierManager
 
                 Doc.Load(Strm);
 
-                var Declartion = Doc.DocumentNode.SelectNodes("//comment()").First();
-                if (Declartion != null) {
-                    var Tag = Declartion.OuterHtml.ToLowerInvariant();
-                    if (Tag.Contains("encoding"))
+                var Declartions = Doc.DocumentNode.SelectNodes("//comment()");
+                if (Declartions != null)
+                {
+                    var Declartion = Declartions.First();
+                    if (Declartion != null)
                     {
-                        var Enco = Tag.Substring(Tag.IndexOf("encoding=")).Split('=')[1].Trim();
-                        var Quote = Enco.First();
-                        if (Quote == '"' || Quote == '\'') {
-                            Enco = Enco.Split(Quote)[1].Trim();
-                        }
-                        var Declared = Encoding.GetEncoding(Enco);
+                        var Tag = Declartion.OuterHtml?.ToLowerInvariant();
+                        if (Tag.Contains("encoding"))
+                        {
+                            var Enco = Tag.Substring(Tag.IndexOf("encoding=")).Split('=')[1].Trim();
+                            var Quote = Enco.First();
+                            if (Quote == '"' || Quote == '\'')
+                            {
+                                Enco = Enco.Split(Quote)[1].Trim();
+                            }
+                            var Declared = Encoding.GetEncoding(Enco);
 
-                        Strm.Position = 0;
-                        Doc.Load(Strm, Declared);
+                            Strm.Position = 0;
+                            Doc.Load(Strm, Declared);
+                        }
                     }
                 }
 
