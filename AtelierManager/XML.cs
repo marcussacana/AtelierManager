@@ -1,6 +1,7 @@
 ﻿using HtmlAgilityPack;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.Contracts;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -13,9 +14,12 @@ namespace AtelierManager
         byte[] Script;
         public XML(byte[] Script)
         {
-            HtmlNode.ElementsFlags["str"] = HtmlElementFlag.Empty;
             this.Script = Script;
         }
+
+        Dictionary<string, int> ElmMaxLen = new Dictionary<string, int>();
+
+        string[] TagsAttribs = new string[] { "text", "title", "message", "desc", "name" };
 
         HtmlDocument Doc;
         public string[] Import() {
@@ -27,20 +31,71 @@ namespace AtelierManager
 
                 Doc.Load(Strm);
 
-                var Elms = Doc.DocumentNode.SelectNodes("//str[@text]");
-                if (Elms == null)
-                    return null;
+                var Declartion = Doc.DocumentNode.SelectNodes("//comment()").First();
+                if (Declartion != null) {
+                    var Tag = Declartion.OuterHtml.ToLowerInvariant();
+                    if (Tag.Contains("encoding"))
+                    {
+                        var Enco = Tag.Substring(Tag.IndexOf("encoding=")).Split('=')[1].Trim();
+                        var Quote = Enco.First();
+                        if (Quote == '"' || Quote == '\'') {
+                            Enco = Enco.Split(Quote)[1].Trim();
+                        }
+                        var Declared = Encoding.GetEncoding(Enco);
 
-                var Text = Elms.Select(x => HttpUtility.HtmlDecode(x.Attributes["Text"].Value)).ToArray();
-                return Text;
+                        Strm.Position = 0;
+                        Doc.Load(Strm, Declared);
+                    }
+                }
+
+                List<string> Strs = new List<string>();
+                foreach (var Tag in TagsAttribs)
+                {
+                    var FoundElms = Doc.DocumentNode.SelectNodes("//*[@*]");
+                    if (FoundElms == null)
+                        continue;
+                    foreach (var FoundElm in FoundElms) {
+
+                        if (ElmMaxLen.ContainsKey(FoundElm.Name))
+                        {
+                            if (FoundElm.InnerLength > ElmMaxLen[FoundElm.Name])
+                                ElmMaxLen[FoundElm.Name] = FoundElm.InnerLength;
+                        }
+                        else if (FoundElm.InnerLength == 0)
+                        {
+                            ElmMaxLen[FoundElm.Name] = FoundElm.InnerLength;
+                            HtmlNode.ElementsFlags[FoundElm.Name] = HtmlElementFlag.Empty;
+                        }
+
+                        foreach (var Attribute in FoundElm.Attributes) {
+                            if (!Attribute.Name.ToLower().EndsWith(Tag) && !Attribute.Name.ToLower().StartsWith(Tag))
+                                continue;
+                            Strs.Add(HttpUtility.HtmlDecode(Attribute.Value));
+                        }
+                    }
+                }
+                return Strs.ToArray();
             }
         }
 
         public byte[] Export(string[] Content) {
 
-            var Elms = Doc.DocumentNode.SelectNodes("//str[@text]").ToArray();
-            for (int i = 0; i < Elms.Length; i++) {
-                Elms[i].Attributes["Text"].Value = HttpUtility.HtmlEncode(Content[i]);
+            int ID = 0;
+            foreach (var Tag in TagsAttribs)
+            {
+                var FoundElms = Doc.DocumentNode.SelectNodes("//*[@*]");
+                if (FoundElms == null)
+                    continue;
+                foreach (var FoundElm in FoundElms)
+                {
+
+                    foreach (var Attribute in FoundElm.Attributes)
+                    {
+                        if (!Attribute.Name.ToLower().EndsWith(Tag) && !Attribute.Name.ToLower().StartsWith(Tag))
+                            continue;
+                        Attribute.Value = HttpUtility.HtmlEncode(Content[ID++]);
+                    }
+                }
             }
 
             using (MemoryStream Stream = new MemoryStream())
