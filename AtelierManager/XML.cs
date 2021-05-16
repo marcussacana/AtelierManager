@@ -19,7 +19,7 @@ namespace AtelierManager
 
         Dictionary<string, int> ElmMaxLen = new Dictionary<string, int>();
 
-        string[] TagsAttribs = new string[] { "text", "title", "message", "desc", "name" };
+        string[] TagsAttribs = new string[] { "text", "title", "message", "desc", "name", "note" };
 
         HtmlDocument Doc;
         public string[] Import() {
