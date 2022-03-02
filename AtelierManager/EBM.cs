@@ -1,6 +1,4 @@
-﻿using AdvancedBinary;
-using System;
-using System.Xml.Serialization;
+﻿using System;
 
 namespace AtelierManager
 {
@@ -17,6 +15,9 @@ namespace AtelierManager
 
         public string[] Import() {
             switch (Mode) {
+                case 4:
+                    Manager = new EBM4(Script);
+                    break;
                 case 3:
                     Manager = new EBM3(Script);
                     break;
@@ -30,7 +31,7 @@ namespace AtelierManager
                     Manager = new EBM0(Script);
                     break;
                 default:
-                    for (int i = 3; i >= 0; i--)
+                    for (int i = 4; i >= 0; i--)
                     {
                         try
                         {

@@ -1252,14 +1252,14 @@ namespace AdvancedBinary
             byte[] Buff = new byte[4];
             int i = BaseStream.Read(Buff, 0, Buff.Length);
             BaseStream.Position -= i;
-            return BigEndian ? BitConverter.ToInt32(Buff, 0) : Tools.Reverse(BitConverter.ToInt32(Buff, 0));
+            return BigEndian ? Tools.Reverse(BitConverter.ToInt32(Buff, 0)) : BitConverter.ToInt32(Buff, 0);
         }
         internal long PeekLong()
         {
             byte[] Buff = new byte[8];
             int i = BaseStream.Read(Buff, 0, Buff.Length);
             BaseStream.Position -= i;
-            return BigEndian ? BitConverter.ToInt64(Buff, 0) : Tools.Reverse(BitConverter.ToInt64(Buff, 0));
+            return BigEndian ? Tools.Reverse(BitConverter.ToInt64(Buff, 0)) : BitConverter.ToInt64(Buff, 0);
         }
 
         internal string PeekString(StringStyle Style, FieldInfo Info = null)
