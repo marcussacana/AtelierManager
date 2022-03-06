@@ -1,6 +1,6 @@
 ﻿using System.Drawing;
 using System.IO;
-using System.Xml.Linq;
+using System.Windows.Forms;
 
 namespace GustFontEditor
 {
@@ -93,6 +93,30 @@ namespace GustFontEditor
 
                     return i;
                 }
+
+                bool DRMFound = false;
+                var DRMPattern = System.Text.Encoding.ASCII.GetBytes(".bind");
+                fixed (byte* pPattern = DRMPattern)
+                {
+                    for (int i = 0; i < Executable.Length; i++)
+                    {
+                        var Found = true;
+                        for (int x = 0; x < DRMPattern.Length; x++)
+                        {
+                            if (DRMPattern[x] != Executable[i+x]) {
+                                Found = false;
+                                break;
+                            }
+                        }
+                        if (Found) {
+                            DRMFound = true;
+                            break;
+                        }
+                    }
+                }
+
+                if (DRMFound)
+                    MessageBox.Show("This game is protected with the Steam Stub, you must unpack it before.", "Error - Game Protected", MessageBoxButtons.OK, MessageBoxIcon.Error);
 
                 return -1;
             }

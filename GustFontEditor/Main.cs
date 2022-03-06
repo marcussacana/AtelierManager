@@ -68,7 +68,7 @@ namespace GustFontEditor
         private void fdExecutable_FileOk(object sender, CancelEventArgs e)
         {
             tbExePath.Text = fdExecutable.FileName;
-            tbGame.Text = FileVersionInfo.GetVersionInfo(fdExecutable.FileName)?.FileDescription;
+            tbGame.Text = FileVersionInfo.GetVersionInfo(fdExecutable.FileName)?.FileDescription.Trim(' ', '"');
             TableOffset = TableFinder.FindTableOffset(fdExecutable.FileName);
             tbTableOffset.Text = $"0x{TableOffset:X8}";
             FindGlyphCount();
