@@ -52,6 +52,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="EBM.cs" />
+    <Compile Include="EBM5.cs" />
     <Compile Include="EBM4.cs" />
     <Compile Include="EBM3.cs" />
     <Compile Include="EBM2.cs" />
